@@ -1,49 +1,15 @@
-from fastapi import FastAPI, Response, status, HTTPException, Depends
-from fastapi.params import Body
-import psycopg2
-from psycopg2.extras import RealDictCursor
-import time
-from . import models
-from .database import engine, get_db
+from .. import models, schemas, utils
+from fastapi import status, HTTPException, Depends, APIRouter, Response
 from sqlalchemy.orm import Session
-from . import models, schemas, utils
+from ..database import get_db
 from typing import List
 
+router = APIRouter(
+    prefix="/",
+    tags=['Posts']
+)
 
-models.Base.metadata.create_all(bind=engine)
-
-app = FastAPI()
-
-while True:    
-    try:
-        con = psycopg2.connect(host='localhost', database='fastapi', user='postgres',
-                            password='Chennai@05', cursor_factory=RealDictCursor)
-        cur = con.cursor()
-        print('DB connection established')
-        break
-    except Exception as e:
-        print("Unable to connect to the database")
-        print("Error: ",e)
-        time.sleep(2)
-        
-my_posts = [
-        {"title": "title of post 1", "content": "content of post 1", "id": 1}, 
-        {"title":"favourite foods", "content": "I like pizza", "id": 2},
-            ]
-
-def find_post_index(id : int):
-    for i in range(len(my_posts)):
-        if my_posts[i]['id']==id:
-            return i
-    return None
-
-@app.get("/")
-def root():
-    return {"message": "Hey daksh its me"}
-
-
-
-@app.get("/posts", response_model=List[schemas.Post])
+@router.get("/", response_model=List[schemas.Post])
 def get_post(db: Session = Depends(get_db)):
     # cur.execute("""SELECT * FROM posts""")
     # posts = cur.fetchall()
@@ -51,7 +17,7 @@ def get_post(db: Session = Depends(get_db)):
     return posts
 
 
-@app.post("/posts", status_code=status.HTTP_201_CREATED, response_model=schemas.Post)
+@router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.Post)
 def create_posts(post: schemas.PostCreate, db : Session = Depends(get_db)):
     
     # cur.execute("""INSERT INTO posts (title, content, published) values (%s,%s,%s) RETURNING *""",
@@ -67,7 +33,7 @@ def create_posts(post: schemas.PostCreate, db : Session = Depends(get_db)):
     return new_post
 
 
-@app.get("/posts/{id}",response_model=schemas.Post)
+@router.get("/{id}",response_model=schemas.Post)
 def get_post(id : int, response: Response, db : Session = Depends(get_db)):
     
     # cur.execute("""SELECT * FROM posts WHERE id=%s""",(str(id),))
@@ -82,7 +48,7 @@ def get_post(id : int, response: Response, db : Session = Depends(get_db)):
     return post
 
 
-@app.delete("/posts/{id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_post(id: int, db : Session = Depends(get_db)):
     
     # cur.execute("""DELETE FROM posts WHERE id=%s RETURNING *""",((str(id)),))
@@ -101,7 +67,7 @@ def delete_post(id: int, db : Session = Depends(get_db)):
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
-@app.put("/posts/{id}",response_model=schemas.Post)
+@router.put("/{id}",response_model=schemas.Post)
 def update_post(id: int, post: schemas.PostCreate, db : Session = Depends(get_db)):
     
     # cur.execute("""UPDATE posts SET title=%s, content=%s, published=%s where id=%s RETURNING *"""
@@ -119,29 +85,3 @@ def update_post(id: int, post: schemas.PostCreate, db : Session = Depends(get_db
     db.commit()
 
     return post_query.first()
-    
-@app.post("/user", status_code=status.HTTP_201_CREATED, response_model=schemas.UserOut)
-def create_user(user: schemas.UserCreate, db : Session =  Depends(get_db)):
-    
-    user.password = utils.hash(user.password)
-    
-    new_user = models.User(**user.model_dump())
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    
-    return new_user
-
-
-@app.get("/user/{id}", response_model=schemas.UserOut)
-def get_user(id: int, db : Session = Depends(get_db)):
-    
-    user = db.query(models.User).filter(models.User.id == id).first()
-    print(user)
-    print(db.query(models.User).filter(models.User.id == id))
-    
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, 
-                            detail=f'User with idL {id} does not exist')
-    return user
-    
